@@ -27,7 +27,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/<your-username>/exposure-inspection-agent.git
+git clone https://github.com/superju111/exposure-inspection-agent.git
 cd exposure-inspection-agent
 ```
 
@@ -51,80 +51,113 @@ vi .env
 ### 3. 部署 agent-compose
 
 ```bash
-# 克隆上游仓库
-git clone https://github.com/chaitin/agent-compose.git /opt/agent-compose
-cd /opt/agent-compose
+# 方式一：一键安装脚本（推荐）
+curl -fsSL https://github.com/chaitin/agent-compose/releases/download/installer-latest/install.sh | bash
 
-# 启动 daemon（restart:always 确保重启后自动恢复）
+# 方式二：Docker 镜像
+docker pull chaitin/agent-compose:latest
+docker pull chaitin/agent-compose-guest:latest
+cd /opt/agent-compose
+cp .env.example .env
+# 编辑 .env 设置 AUTH_PASSWORD、AUTH_SECRET
 docker compose up -d
 
 # 验证 daemon 运行
-docker compose ps
-# 应显示 agent-compose daemon 状态为 running
+agent-compose status
+# 应显示 daemon 状态为 running
+
+# 配置 Docker 开机自启
+systemctl enable docker
 ```
 
 ### 4. 部署 OctoBus
 
 ```bash
-# 克隆上游仓库
-git clone https://github.com/chaitin/OctoBus.git /opt/OctoBus
-cd /opt/OctoBus
+# 方式一：Docker（推荐）
+docker run -d \
+  --name octobus \
+  --restart always \
+  -p 127.0.0.1:9000:9000 \
+  -v octobus-data:/var/lib/octobus \
+  ghcr.io/chaitin/octobus:latest
 
-# 启动 OctoBus（仅绑定 127.0.0.1，不对公网发布端口）
-docker compose up -d
+# 方式二：npm 全局安装
+npm install -g @chaitin-ai/octobus
+octobus serve --data-dir /var/lib/octobus --addr 127.0.0.1:9000 &
 
 # 验证 status
-docker exec octobus octobus status
+octobus status
 # 应显示 "running" 状态
 ```
 
 ### 5. 导入能力服务包
 
 ```bash
-# 导入 portscan 服务
-docker exec octobus octobus service import /services/portscan
+# 导入 portscan 服务包
+octobus service import portscan /opt/agent/octobus-service/portscan
 
-# 导入 assetquery 服务
-docker exec octobus octobus service import /services/assetquery
+# 导入 assetquery 服务包
+octobus service import assetquery /opt/agent/octobus-service/assetquery
 
 # 创建实例
-docker exec octobus octobus instance create portscan default
-docker exec octobus octobus instance create assetquery default
+octobus instance create portscan-default \
+  --service portscan \
+  --config-json '{"target_ports":"1-65535"}'
 
-# 创建能力集（显式选择暴露的方法）
-docker exec octobus octobus capset create exposure-scan \
-  --service portscan --instance default --method scan_ports \
-  --service assetquery --instance default --method query_assets
+octobus instance create assetquery-default \
+  --service assetquery \
+  --config-json '{"label":"primary"}'
 
-# 生成访问令牌
-docker exec octobus octobus capset token exposure-scan
-# 将输出的 token 填入 .env 的 OCTOBUS_CAPSET_TOKEN
+# 创建能力集
+octobus capset create exposure-scan
+
+# 将实例加入能力集
+octobus capset add-instance exposure-scan portscan-default
+octobus capset add-instance exposure-scan assetquery-default
+
+# 显式选择暴露的方法
+octobus capset select-method exposure-scan portscan-default portscan.v1.PortScanService/ScanPorts
+octobus capset select-method exposure-scan assetquery-default assetquery.v1.AssetQueryService/QueryAssets
+
+# 生成访问令牌（Bearer Token）
+printf '%s' 'exposure-scan-token' | octobus capset add-token exposure-scan local --token-stdin
+# 将 token 填入 .env 的 OCTOBUS_CAPSET_TOKEN
+
+# 验证能力集目录
+octobus catalog exposure-scan --all --json
 ```
 
 ### 6. 注册 Agent 项目
 
 ```bash
-# 使用 agent-compose CLI 注册项目
-agent-compose project create /path/to/exposure-inspection-agent/agent-compose.yml
+# 使用 agent-compose CLI 应用项目
+cd /opt/agent
+agent-compose up -f agent-compose.yml
 
-# 验证项目列表
-agent-compose project list
-# 应显示 exposure-inspection-agent
+# 验证项目沙箱列表
+agent-compose ps
+# 应显示 exposure-inspection-agent 项目
+
+# 验证调度器状态
+agent-compose scheduler ls
+# 应显示 cron trigger: "0 2 * * *", enabled: true
 
 # 手动触发一次运行（验证完整流程）
-agent-compose project run exposure-inspection-agent
+agent-compose run inspector --prompt "Run exposure inspection"
+# 或通过 scheduler 手动触发
+agent-compose scheduler trigger exposure-inspection-agent
 
 # 查看运行日志
-agent-compose project logs exposure-inspection-agent
+agent-compose logs --project exposure-inspection-agent
 ```
 
 ### 7. 配置定时触发
 
 ```bash
 # agent-compose.yml 中已配置 cron: "0 2 * * *"
-# 确保调度器已启用
-agent-compose scheduler status
-# 应显示 enabled: true, type: cron
+# 确认调度器已启用
+agent-compose scheduler ls --json
+# 应显示 enabled: true, type: cron, schedule: "0 2 * * *"
 ```
 
 ### 8. 配置考官 SSH 登录
@@ -268,12 +301,17 @@ Agent 通过 Connect RPC 协议经 OctoBus 调用能力：
 
 | 项目 | 值 |
 |------|-----|
-| 登录地址 | `<SERVER_IP>` |
-| 用户名 | `<SSH_USER>` |
-| 端口 | `<SSH_PORT>` |
+| 登录地址 | `121.40.74.96` |
+| 用户名 | `root` |
+| 端口 | `22` |
 | 认证方式 | 考官公钥已写入 `~/.ssh/authorized_keys` |
+| 云平台 | 阿里云 ECS（华东1-杭州） |
+| 实例规格 | 2核4G (ecs.e-c1m2.large) Ubuntu 22.04 |
+| 公网IP | `121.40.74.96` |
+| 私网IP | `172.27.223.104` |
+| Docker | 29.1.3 + docker compose v2 |
 
-> 提交时填写真实值。安全组仅开放考官来源 IP 的 SSH 访问。
+> 安全组仅开放考官来源 IP 的 SSH 访问（22 端口），其余端口不对外放行。
 
 ---
 
