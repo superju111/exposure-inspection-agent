@@ -1,0 +1,29 @@
+{
+  "name": "exposure-scan",
+  "description": "Capability set for exposure inspection agent - grants port scanning and asset query",
+  "agent": "exposure-inspection-agent",
+  "bindings": [
+    {
+      "service": "portscan",
+      "instance": "default",
+      "methods": ["scan_ports"],
+      "description": "Allow agent to scan ports on assets in inventory"
+    },
+    {
+      "service": "assetquery",
+      "instance": "default",
+      "methods": ["query_assets"],
+      "description": "Allow agent to query asset inventory"
+    }
+  ],
+  "token_config": {
+    "type": "bearer",
+    "storage": "hash",
+    "note": "Token stored as hash only - plaintext never persisted. Set via OCTOBUS_CAPSET_TOKEN env var in agent."
+  },
+  "audit": {
+    "log_format": "ndjson",
+    "fields": ["timestamp", "capset", "service", "instance", "method", "status_code", "duration_ms"],
+    "log_path": "/var/log/octobus/audit.ndjson"
+  }
+}

@@ -1,0 +1,132 @@
+# docker-compose.yml: combined deployment of agent + OctoBus
+#
+# This file orchestrates:
+#   1. OctoBus gateway (binds 127.0.0.1:9000 - NOT exposed to public)
+#   2. portscan service (OctoBus backend, 127.0.0.1 only)
+#   3. assetquery service (OctoBus backend, 127.0.0.1 only)
+#   4. exposure-inspection-agent (managed by agent-compose guest)
+#
+# Security design:
+#   - All services bind 127.0.0.1 or Docker internal network only
+#   - No ports published to host's public interface
+#   - SSH is the ONLY public access (managed by security group)
+#   - restart:always ensures auto-recovery after reboot
+#
+# Prerequisites:
+#   - Docker + docker compose installed
+#   - .env file configured (copy from .env.example)
+#   - agent-compose daemon running on host
+
+version: "3.8"
+
+services:
+  # ============================================================
+  # OctoBus Gateway
+  # Binds 127.0.0.1:9000 only - never exposed to public internet
+  # Admin API + gRPC + Connect RPC + MCP + Reflection on single port
+  # ============================================================
+  octobus:
+    image: ghcr.io/chaitin/octobus:latest
+    container_name: octobus
+    restart: always
+    environment:
+      - OCTOBUS_AUTH_SECRET=${OCTOBUS_AUTH_SECRET}
+      - OCTOBUS_LOG_LEVEL=info
+    ports:
+      # Bind to 127.0.0.1 ONLY - not accessible from public internet
+      # agent-compose connects via Docker internal network
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - octobus_data:/data
+      - ./octobus-service:/services/portscan:ro
+      - ./octobus-service/assetquery:/services/assetquery:ro
+      - ./octobus-service/capset.json:/config/capsets/exposure-scan.json:ro
+    networks:
+      - agent-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ============================================================
+  # PortScan Service (OctoBus backend)
+  # Provides TCP port scanning capability via gRPC
+  # Accessible only through OctoBus gateway - not directly
+  # ============================================================
+  portscan-service:
+    build:
+      context: ./octobus-service
+      dockerfile: Dockerfile.service
+    container_name: portscan-service
+    restart: always
+    environment:
+      - PORTSCAN_PORT=50051
+    networks:
+      - agent-net
+    depends_on:
+      octobus:
+        condition: service_healthy
+
+  # ============================================================
+  # AssetQuery Service (OctoBus backend)
+  # Provides asset inventory query capability via gRPC
+  # ============================================================
+  assetquery-service:
+    build:
+      context: ./octobus-service
+      dockerfile: Dockerfile.service
+    container_name: assetquery-service
+    restart: always
+    environment:
+      - ASSETQUERY_PORT=50052
+      - ASSET_DATA_PATH=/data/assets.json
+    volumes:
+      - ./sample-data:/data:ro
+    networks:
+      - agent-net
+    depends_on:
+      octobus:
+        condition: service_healthy
+
+  # ============================================================
+  # Exposure Inspection Agent (managed by agent-compose)
+  # This container runs the agent cycle triggered by agent-compose daemon
+  # The agent calls OctoBus via Docker internal network
+  # ============================================================
+  exposure-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: exposure-inspection-agent
+    restart: always
+    environment:
+      - OCTOBUS_ENDPOINT=http://octobus:9000
+      - OCTOBUS_CAPSET_TOKEN=${OCTOBUS_CAPSET_TOKEN}
+      - LLM_API_BASE=${LLM_API_BASE}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - OUTPUT_DIR=/data/output
+      - KNOWLEDGE_DIR=/app/knowledge
+    volumes:
+      - agent_output:/data/output
+    networks:
+      - agent-net
+    depends_on:
+      octobus:
+        condition: service_healthy
+      portscan-service:
+        condition: service_started
+      assetquery-service:
+        condition: service_started
+
+volumes:
+  octobus_data:
+  agent_output:
+
+networks:
+  # Shared bridge network - agent reaches OctoBus by service name
+  # No ports from this network are published to the public internet
+  agent-net:
+    driver: bridge

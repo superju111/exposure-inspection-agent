@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package assetquery;
+
+// Asset inventory query service
+// Provides asset data to agents via OctoBus gateway
+service AssetQueryService {
+  // Query assets from inventory with optional filter
+  rpc QueryAssets(AssetQueryRequest) returns (AssetQueryResponse) {}
+}
+
+message AssetQueryRequest {
+  map<string, string> filter = 1;  // Optional filter (e.g., {"env": "prod"})
+}
+
+message Asset {
+  string ip = 1;
+  string hostname = 2;
+  repeated string tags = 3;     // Asset tags (env, role, criticality)
+  string owner = 4;             // Asset owner/team
+  string environment = 5;       // prod, staging, dev
+}
+
+message AssetQueryResponse {
+  repeated Asset assets = 1;
+  int32 total = 2;
+}

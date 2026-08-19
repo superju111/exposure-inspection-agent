@@ -1,0 +1,12 @@
+{
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 0
+  },
+  "log_level": "info",
+  "scan": {
+    "default_timeout": 5,
+    "max_concurrent": 10,
+    "rate_limit_per_host": 50
+  }
+}

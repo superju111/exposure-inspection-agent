@@ -1,0 +1,104 @@
+# agent-compose project file: exposure-inspection-agent
+#
+# This file is consumed by agent-compose daemon to manage the agent's
+# lifecycle: build, run, schedule, and proxy capabilities.
+#
+# agent-compose architecture:
+#   - daemon: persistent process, single source of truth (this file)
+#   - CLI: thin client, validates and forwards commands to daemon
+#   - guest: Docker container running the agent code in sandbox
+#
+# Trigger: cron (daily at 02:00)
+# Runtime: docker (container-based isolation)
+# Model: env-injected credentials, never hardcoded
+
+name: exposure-inspection-agent
+description: >
+  Internet exposure surface and high-risk management port inspection agent.
+  Scans assets for exposed management ports and debug interfaces, classifies
+  exposures using practice-derived rules, and generates prioritized reports.
+
+# Runtime configuration
+runtime:
+  driver: docker
+  image: exposure-inspection-agent:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: always
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import sys; sys.path.insert(0,'/app/src'); import config; print('ok')"]
+    interval: 60s
+    timeout: 10s
+    retries: 3
+    start_period: 10s
+
+# Workspace: files available to the agent at /app
+workspace:
+  src: ./src
+  knowledge: ./knowledge
+  sample_data: ./sample-data
+
+# Environment variables (all credentials are placeholders - never hardcode!)
+# Copy .env.example to .env and fill in real values before deployment.
+environment:
+  # OctoBus gateway connection
+  OCTOBUS_ENDPOINT: "${OCTOBUS_ENDPOINT}"
+  OCTOBUS_CAPSET_TOKEN: "${OCTOBUS_CAPSET_TOKEN}"
+
+  # LLM model credentials (OpenAI-compatible API)
+  LLM_API_BASE: "${LLM_API_BASE}"
+  LLM_API_KEY: "${LLM_API_KEY}"
+  LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+
+  # Agent configuration
+  ASSET_INVENTORY_PATH: "/data/assets.csv"
+  OUTPUT_DIR: "/data/output"
+  KNOWLEDGE_DIR: "/app/knowledge"
+  SCAN_TIMEOUT: "10"
+  SCAN_CONCURRENCY: "5"
+
+# Volumes: persistent data across container restarts
+volumes:
+  agent_output:
+    mount: /data/output
+    description: "Inspection reports and audit logs"
+  agent_knowledge:
+    mount: /app/knowledge
+    description: "Practice-derived rule files (read-only)"
+
+# Trigger: cron schedule (daily at 02:00 AM)
+# Why cron over event-driven: exposure inspection is a periodic full-scan
+# activity. Event-driven triggers (e.g., on new asset registration) would
+# cause redundant scans and miss cumulative exposure patterns (port
+# combinations). Cron ensures consistent baseline coverage.
+trigger:
+  type: cron
+  schedule: "0 2 * * *"  # Daily 02:00
+  timezone: "Asia/Shanghai"
+  enabled: true
+
+# Capability proxy: route agent calls through OctoBus
+# This ensures all capability calls go through the gateway, not directly
+# to backend services. agent-compose daemon proxies requests to OctoBus.
+capabilities:
+  gateway:
+    type: octobus
+    endpoint: "${OCTOBUS_ENDPOINT}"
+    capset: "exposure-scan"
+    token_env: "OCTOBUS_CAPSET_TOKEN"
+    protocol: "connect-rpc"
+    # Network: both agent-compose and OctoBus on same Docker bridge network
+    # OctoBus binds 127.0.0.1 only - not exposed to public internet
+    network: "agent-net"
+
+# Logging configuration
+logging:
+  level: info
+  format: json
+  # Audit logs in NDJSON format for traceability
+  audit:
+    enabled: true
+    path: /data/output/logs
+    format: ndjson
+    retention_days: 90

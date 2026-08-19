@@ -1,0 +1,22 @@
+{
+  "name": "portscan",
+  "version": "1.0.0",
+  "description": "Port scanning capability service for exposure inspection agent",
+  "type": "grpc",
+  "main": "portscan/server.js",
+  "proto": "portscan/portscan.proto",
+  "capabilities": [
+    {
+      "method": "scan_ports",
+      "description": "Scan specified ports on a target host and return open/closed status with banners",
+      "request_type": "ScanRequest",
+      "response_type": "ScanResponse"
+    }
+  ],
+  "default_instance": {
+    "name": "default",
+    "config": "config.json",
+    "mode": "on-demand",
+    "description": "Default portscan instance - starts on demand to serve scan requests"
+  }
+}

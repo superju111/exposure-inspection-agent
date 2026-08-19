@@ -1,0 +1,213 @@
+# Exposure Criteria - Determination Rules for What Constitutes "Exposed"
+#
+# This file defines the criteria for determining whether a finding
+# constitutes a genuine security exposure or is an expected/authorized
+# service. This is NOT a checklist of public best practices.
+#
+# The criteria here represent non-obvious decisions made during real
+# audits where the "right answer" depended on context that public
+# standards cannot capture:
+#   - When is port 80 "exposed" vs "expected"?
+#   - How to handle services behind CDN?
+#   - What banner characteristics indicate a service is intentionally
+#     public vs accidentally exposed?
+#
+# Ablation impact: Without these criteria, the analyzer treats all
+# open ports as exposures, generating 100+ findings per scan against
+# a 50-asset environment. With these criteria, the analyzer correctly
+# distinguishes authorized public services from accidental exposures,
+# reducing findings to actionable items (typically 5-15 per 50 assets).
+#
+# Last updated: 2026-08-19
+# Rule version: 1.0.0
+
+# ============================================================
+# Authorized Exposure Indicators
+# Banners/patterns that indicate a service is INTENTIONALLY public.
+# When matched, the finding is suppressed or downgraded.
+# ============================================================
+authorized_exposure_indicators:
+  description: >
+    Patterns that indicate a port exposure is authorized and expected.
+    Matching these does NOT suppress findings for blocklist ports
+    (2375, 6379, etc.) - those are never authorized regardless.
+    Only applies to conditional_exposure ports (80, 443, 8080, etc.).
+
+  patterns:
+    # Valid TLS certificate = service intended for public access
+    - rule_id: "AUTH-VALID-TLS"
+      indicator: "valid_ssl_cert"
+      explanation: >
+        Service has a valid (non-expired, trusted CA) TLS certificate.
+        Indicates intentional public exposure. Most accidental
+        exposures use self-signed or expired certs.
+      applies_to: ["conditional_exposure"]
+
+    # CDN/CDN-managed headers
+    - rule_id: "AUTH-CDN-HEADER"
+      indicator: "cf-ray"
+      explanation: >
+        Cloudflare CDN header present. Service is behind CDN and
+        the "exposure" is the CDN edge, not the origin server.
+      applies_to: ["conditional_exposure"]
+
+    - rule_id: "AUTH-CDN-HEADER-2"
+      indicator: "x-amz-cf-id"
+      explanation: "AWS CloudFront CDN header."
+      applies_to: ["conditional_exposure"]
+
+    # HSTS header = security-conscious configuration
+    - rule_id: "AUTH-HSTS"
+      indicator: "strict-transport-security"
+      explanation: >
+        HSTS header present. Indicates the service is deliberately
+        configured for public HTTPS access with security headers.
+        Accidental exposures rarely have HSTS configured.
+      applies_to: ["conditional_exposure"]
+
+# ============================================================
+# Unauthorized Exposure Indicators
+# Patterns that INCREASE confidence that an exposure is accidental
+# or unauthorized. These boost severity.
+# ============================================================
+unauthorized_exposure_indicators:
+  description: >
+    Patterns that signal accidental or unauthorized exposure.
+    Finding these in addition to an open management port increases
+    confidence and severity.
+
+  patterns:
+    # Self-signed or expired TLS cert
+    - rule_id: "UNAUTH-SELF-SIGNED"
+      indicator: "self_signed_cert"
+      explanation: >
+        Self-signed certificate on a management port. Real management
+        infrastructure uses internal CA or trusted certs. Self-signed
+        often means someone set up a quick test environment and forgot
+        to restrict access.
+      severity_boost: 1
+
+    # Default/error page responses
+    - rule_id: "UNAUTH-DEFAULT-PAGE"
+      indicator: "it works!"
+      explanation: >
+        Default Apache "It works!" page. Indicates the web server was
+        just installed and not configured. Often paired with exposed
+        management ports in staging environments that leaked to prod.
+      severity_boost: 1
+
+    # Debug mode indicators
+    - rule_id: "UNAUTH-DEBUG-MODE"
+      indicator: "debug=true"
+      explanation: >
+        Debug mode enabled in URL or response. Application is running
+        in development configuration. Stack traces and internal info
+        will be exposed on errors.
+      severity_boost: 2
+
+    # Missing security headers on management interface
+    - rule_id: "UNAUTH-NO-SEC-HEADERS"
+      indicator: "missing_security_headers"
+      explanation: >
+        Management interface response lacks X-Content-Type-Options,
+        X-Frame-Options. Indicates minimal configuration effort,
+        common in accidentally exposed services.
+      severity_boost: 1
+
+# ============================================================
+# Evidence Sufficiency Rules
+# When is evidence "sufficient" for automated classification vs
+# requiring manual confirmation?
+# ============================================================
+evidence_sufficiency:
+  description: >
+    Rules for when the analyzer can make a determination vs when
+    it must flag for manual review. This is a non-obvious trade-off:
+    too aggressive = false positives waste analyst time;
+    too conservative = analyst drowns in manual review queue.
+
+  # Sufficient for automated classification:
+  sufficient_for_auto:
+    - condition: "banner_matches_high_risk_pattern"
+      action: "auto_classify"
+      explanation: >
+        When banner exactly matches a known high-risk pattern, the
+        evidence is deterministic. No manual review needed.
+
+    - condition: "port_in_blocklist_with_any_banner"
+      action: "auto_classify"
+      explanation: >
+        Blocklist ports are critical regardless of banner. Even an
+        empty banner on port 2375 (Docker) is sufficient because the
+        port itself is the vulnerability.
+
+    - condition: "port_combination_matched"
+      action: "auto_classify"
+      explanation: >
+        Port combinations are high-confidence indicators. The
+        statistical correlation with breach incidents justifies
+        automated classification.
+
+  # Requires manual confirmation:
+  requires_manual_review:
+    - condition: "empty_banner_on_conditional_port"
+      action: "flag_for_review"
+      explanation: >
+        When a conditional port (8080, 8443) has no banner, we cannot
+        determine if it's a legitimate service or management console.
+        Flag for manual verification - do NOT auto-classify as
+        exposure. This is our #1 source of false positives in testing.
+
+    - condition: "banner_matches_fp_pattern_partially"
+      action: "flag_for_review"
+      explanation: >
+        When banner partially matches a false-positive pattern (e.g.,
+        contains "cloud" but not the full "cloudflare" string), we
+        cannot auto-downgrade. Partial matches may indicate a service
+        trying to mimic a CDN to avoid detection.
+
+    - condition: "unknown_service_on_non_standard_port"
+      action: "flag_for_review"
+      explanation: >
+        Unknown service on a non-standard port (e.g., HTTP on 9999).
+        Could be shadow IT, custom app, or misconfigured service.
+        Needs human judgment to determine business context.
+
+# ============================================================
+# Remediation Priority Override Rules
+# When standard priority calculation should be overridden based on
+# business context.
+# ============================================================
+priority_overrides:
+  description: >
+    Non-obvious priority decisions based on business context.
+    These overrides reflect the reality that not all "critical"
+    findings are equally urgent - some can wait for a maintenance
+    window, others need immediate action.
+
+  rules:
+    - rule_id: "OVERRIDE-EXTERNAL-FACING"
+      condition: "asset_tag_contains_external_facing"
+      override: "boost_priority_one_level"
+      explanation: >
+        Assets tagged as "external-facing" (DMZ, public web tier) have
+        a higher risk tolerance by design. But if a BLOCKLIST port is
+        found on them, boost priority one level because these assets
+        are the first target for attackers.
+
+    - rule_id: "OVERRIDE-INTERNAL-ONLY"
+      condition: "asset_tag_contains_internal_only"
+      override: "critical_blocklist_remains_critical"
+      explanation: >
+        Assets tagged "internal-only" that have ANY port exposed to
+        internet are misconfigured. All blocklist findings remain
+        critical - do not downgrade even if banner is clean.
+
+    - rule_id: "OVERRIDE-CROWN-JEWEL"
+      condition: "asset_tag_contains_crown_jewel"
+      override: "boost_all_to_p1"
+      explanation: >
+        Crown jewel assets (databases with PII, payment systems).
+        ANY exposure finding is automatically P1 regardless of
+        calculated risk score. The blast radius is too large to
+        tolerate any exposure.

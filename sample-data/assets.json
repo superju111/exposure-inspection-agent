@@ -1,0 +1,72 @@
+[
+  {
+    "ip": "10.0.1.10",
+    "hostname": "web-prod-01",
+    "tags": ["production", "external-facing"],
+    "owner": "web-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.1.11",
+    "hostname": "web-prod-02",
+    "tags": ["production", "external-facing"],
+    "owner": "web-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.2.20",
+    "hostname": "db-master-01",
+    "tags": ["production", "crown-jewel", "internal-only"],
+    "owner": "db-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.2.21",
+    "hostname": "db-replica-01",
+    "tags": ["production", "crown-jewel", "internal-only"],
+    "owner": "db-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.3.30",
+    "hostname": "k8s-master-01",
+    "tags": ["production", "internal-only"],
+    "owner": "platform-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.3.31",
+    "hostname": "k8s-worker-01",
+    "tags": ["production", "internal-only"],
+    "owner": "platform-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.4.40",
+    "hostname": "staging-app-01",
+    "tags": ["staging", "dev"],
+    "owner": "dev-team",
+    "environment": "staging"
+  },
+  {
+    "ip": "10.0.4.41",
+    "hostname": "staging-redis-01",
+    "tags": ["staging", "dev"],
+    "owner": "dev-team",
+    "environment": "staging"
+  },
+  {
+    "ip": "203.0.113.10",
+    "hostname": "public-lb-01",
+    "tags": ["production", "external-facing", "dmz"],
+    "owner": "infra-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "203.0.113.20",
+    "hostname": "public-api-01",
+    "tags": ["production", "external-facing"],
+    "owner": "api-team",
+    "environment": "prod"
+  }
+]
