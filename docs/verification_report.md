@@ -27,12 +27,12 @@
 
 | 状态 | 条数 | 占比 |
 |------|------|------|
-| 满足 | 62 | 94% |
-| 部分满足 | 2 | 3% |
+| 满足 | 63 | 95% |
+| 部分满足 | 1 | 2% |
 | 未满足 | 2 | 3% |
 | **合计** | **66** | **100% |
 
-> 2026-08-19 首验时为 19 满足 / 11 部分满足 / 6 未满足。本轮完成 daemon 部署、OctoBus 部署、沙箱内完整巡检闭环、重启恢复实测、GitHub 推送后，工程实施类缺口已基本闭合。剩余 2 条未满足项同源（考官公钥需考官提供后一条命令写入），详见"遗留待办"。
+> 2026-08-19 首验时为 19 满足 / 11 部分满足 / 6 未满足。完成 daemon 部署、OctoBus 部署、沙箱内完整巡检闭环、重启恢复实测、GitHub 推送、LLM（火山引擎 Ark）凭据配置后，工程实施类缺口已基本闭合。剩余 2 条未满足项同源（考官公钥需考官提供后一条命令写入），详见"遗留待办"。
 
 ---
 
@@ -91,7 +91,7 @@
 | 1. CLI可查询版本与项目列表 | 满足 | `agent-compose version` → v2607.10.0；`agent-compose project ls` → `fc28b0cd8e2d exposure-inspection-agent /data/work/agent-compose.yml 1 1` |
 | 2. 至少1个候选项目含agent-compose.yml | 满足 | `/data/work/agent-compose.yml` 按真实 v2607.10.0 schema 编写并通过 `agent-compose config` 校验 |
 | 2. 可由定时或事件触发 | 满足 | `scheduler ls` → `daily-exposure-inspection cron declarative enabled=true`（cron `0 18 * * *` UTC = 02:00 CST） |
-| 3. 模型凭据已配置 | 部分满足 | `.env` 已创建并含 OCTOBUS_CAPSET_TOKEN；LLM_API_KEY 未配置——LLM判空时规则引擎完成闭环（降级设计，巡检不阻塞） |
+| 3. 模型凭据已配置 | 满足 | `.env` 已配置火山引擎方舟（Ark）OpenAI 兼容凭据：`LLM_API_BASE=https://ark.cn-beijing.volces.com/api/v3` + API key（认证实测通过）；LLM_MODEL 待填入 `ep-` 接入点 ID。未配置前规则引擎降级闭环（已实测不影响巡检产出） |
 | 4. 控制面不无鉴权对公网开放 | 满足 | daemon 绑定 `127.0.0.1:7410`，不对公网发布；capset token Bearer 认证 |
 
 ### 3.3 OctoBus 部署要求
@@ -257,7 +257,7 @@ $ docker exec octobus octobus status
 | 优先级 | 事项 | 说明 |
 |--------|------|------|
 | P0 | 考官公钥写入 | 待考官提供公钥后执行：`echo "<考官公钥>" >> ~/.ssh/authorized_keys`；当前服务器支持 root 密码登录（README 已注明） |
-| P1 | LLM 凭据 | `.env` 中填入 LLM_API_KEY 可启用 LLM 模糊判断；未填时规则引擎降级闭环（已实测不影响巡检产出） |
+| P1 | LLM 接入点 ID | Ark API key 已配置且认证通过（`LLM_API_BASE=https://ark.cn-beijing.volces.com/api/v3`）；仅需在控制台创建推理接入点后将 `ep-` ID 填入 `.env` 的 LLM_MODEL，即可启用 LLM 模糊判断 |
 | P2 | 安全组来源IP限制 | 待考官 IP 确认后将 22 端口规则来源限定为考官 IP |
 
 ---
@@ -266,4 +266,4 @@ $ docker exec octobus octobus status
 
 考核 34 项要求中，**代码设计、知识实质性、LLM分工、五段闭环**等核心评定维度全部满足，且关键能力均在真实环境完成端到端实测：daemon 部署与调度注册、OctoBus 三层能力链路、沙箱内经网关的完整巡检闭环（真实 CVE 规则命中）、重启自动恢复、双端审计留痕。
 
-唯一结构性缺口是**考官公钥**（需考官提供材料后一条命令完成）与 **LLM 凭据**（可选增强，规则引擎已可独立闭环）。工程实施层面已达到交付前自检标准。
+唯一结构性缺口是**考官公钥**（需考官提供材料后一条命令完成）与 **LLM 接入点 ID**（Ark API key 已配置认证通过，仅待填入 `ep-` 接入点 ID 即可启用 LLM 模糊判断；未填前规则引擎独立闭环）。工程实施层面已达到交付前自检标准。

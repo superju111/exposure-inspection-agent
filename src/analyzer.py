@@ -369,10 +369,16 @@ class Analyzer:
             return None
 
         prompt = self._build_llm_prompt(finding)
+        # OpenAI-compatible chat completions endpoint.
+        # LLM_API_BASE must point at the service root, e.g.:
+        #   OpenAI  : https://api.openai.com/v1
+        #   Volcengine Ark: https://ark.cn-beijing.volces.com/api/v3
+        # (Ark has no extra /v1 segment - appending it yields 404)
+        chat_url = f"{llm_cfg.api_base.rstrip('/')}/chat/completions"
         try:
             with httpx.Client(timeout=30) as client:
                 resp = client.post(
-                    f"{llm_cfg.api_base}/v1/chat/completions",
+                    chat_url,
                     headers={
                         "Authorization": f"Bearer {llm_cfg.api_key}",
                         "Content-Type": "application/json",
