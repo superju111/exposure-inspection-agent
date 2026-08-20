@@ -1,0 +1,27 @@
+syntax = "proto3";
+package portscan.v1;
+
+service PortScanService {
+  rpc ScanPorts(ScanRequest) returns (ScanResponse) {}
+}
+
+message ScanRequest {
+  string host = 1;
+  repeated int32 ports = 2;
+  int32 timeout_per_port = 3;
+}
+
+message PortResult {
+  int32 port = 1;
+  string state = 2;
+  string banner = 3;
+  string service = 4;
+}
+
+message ScanResponse {
+  string host = 1;
+  repeated PortResult results = 2;
+  int32 total_scanned = 3;
+  int32 total_open = 4;
+  int64 scan_duration_ms = 5;
+}

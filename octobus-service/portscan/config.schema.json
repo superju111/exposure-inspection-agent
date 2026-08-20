@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "default_timeout": {"type": "integer", "default": 5},
+    "max_concurrent": {"type": "integer", "default": 10}
+  }
+}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+package assetquery.v1;
+
+service AssetQueryService {
+  rpc QueryAssets(AssetQueryRequest) returns (AssetQueryResponse) {}
+}
+
+message AssetQueryRequest {
+  map<string, string> filter = 1;
+}
+
+message Asset {
+  string ip = 1;
+  string hostname = 2;
+  repeated string tags = 3;
+  string owner = 4;
+  string environment = 5;
+}
+
+message AssetQueryResponse {
+  repeated Asset assets = 1;
+  int32 total = 2;
+}

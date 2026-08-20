@@ -5,14 +5,14 @@
   "bindings": [
     {
       "service": "portscan",
-      "instance": "default",
-      "methods": ["scan_ports"],
+      "instance": "portscan-default",
+      "methods": ["portscan.v1.PortScanService/ScanPorts"],
       "description": "Allow agent to scan ports on assets in inventory"
     },
     {
       "service": "assetquery",
-      "instance": "default",
-      "methods": ["query_assets"],
+      "instance": "assetquery-default",
+      "methods": ["assetquery.v1.AssetQueryService/QueryAssets"],
       "description": "Allow agent to query asset inventory"
     }
   ],

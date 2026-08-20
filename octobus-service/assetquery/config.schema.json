@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {
+    "asset_data_path": {"type": "string"}
+  }
+}
