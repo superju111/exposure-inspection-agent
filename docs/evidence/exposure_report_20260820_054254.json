@@ -1,0 +1,107 @@
+{
+  "report_id": "EXP-20260820054254",
+  "generated_at": "2026-08-20T05:42:54.947341",
+  "scan_metadata": {
+    "scan_date": "2026-08-20 05:42:54",
+    "total_assets": 11,
+    "total_ports_scanned": 550,
+    "agent_version": "1.0.0",
+    "knowledge_rules_loaded": [
+      "port_risk_rules",
+      "banner_signatures",
+      "exposure_criteria",
+      "priority_matrix"
+    ]
+  },
+  "summary": {
+    "total_findings": 3,
+    "severity_breakdown": {
+      "critical": 0,
+      "high": 0,
+      "medium": 1,
+      "low": 2
+    },
+    "priority_breakdown": {
+      "P2-24小时内处置": 1,
+      "P4-跟踪观察": 2
+    }
+  },
+  "findings": [
+    {
+      "host": "172.18.0.1",
+      "asset": {
+        "ip": "172.18.0.1",
+        "hostname": "docker-host-gw",
+        "tags": [
+          "production",
+          "internal-only",
+          "host"
+        ],
+        "owner": "infra-team",
+        "environment": "prod"
+      },
+      "port": 22,
+      "service": "ssh",
+      "banner": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.16",
+      "severity": "medium",
+      "rule_id": "SSH-OPENSSH-VULN",
+      "rule_source": "banner_analysis",
+      "evidence": "Service 'ssh' banner matched rule: 'openssh_8.'. OpenSSH 8.x. May have regreSSHion (CVE-2024-6387) depending on exact patch level. Requires version-specific verification.\n. Banner: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.16",
+      "recommendation": "Verify patch level against CVE-2024-6387",
+      "timestamp": 1787204574.9470487,
+      "risk_score": 3.38,
+      "priority": "P2-24小时内处置"
+    },
+    {
+      "host": "octobus",
+      "asset": {
+        "ip": "octobus",
+        "hostname": "capability-gateway-01",
+        "tags": [
+          "production",
+          "management-plane",
+          "high-risk-service"
+        ],
+        "owner": "security-team",
+        "environment": "prod"
+      },
+      "port": 9000,
+      "service": "unknown",
+      "banner": "",
+      "severity": "low",
+      "rule_id": "UNKNOWN-PORT-001",
+      "rule_source": "unknown_port_review",
+      "evidence": "Port 9000 open but not in known service registry. Possible shadow IT or misconfigured service. Banner: ",
+      "recommendation": "Identify service owner and verify business justification",
+      "timestamp": 1787204574.946915,
+      "risk_score": 1.2,
+      "priority": "P4-跟踪观察"
+    },
+    {
+      "host": "agent-compose",
+      "asset": {
+        "ip": "agent-compose",
+        "hostname": "agent-daemon-01",
+        "tags": [
+          "production",
+          "management-plane",
+          "control-plane"
+        ],
+        "owner": "platform-team",
+        "environment": "prod"
+      },
+      "port": 7410,
+      "service": "unknown",
+      "banner": "",
+      "severity": "low",
+      "rule_id": "UNKNOWN-PORT-001",
+      "rule_source": "unknown_port_review",
+      "evidence": "Port 7410 open but not in known service registry. Possible shadow IT or misconfigured service. Banner: ",
+      "recommendation": "Identify service owner and verify business justification",
+      "timestamp": 1787204574.9470034,
+      "risk_score": 1.2,
+      "priority": "P4-跟踪观察"
+    }
+  ],
+  "llm_analyses": {}
+}

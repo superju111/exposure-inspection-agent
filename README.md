@@ -255,13 +255,15 @@ Agent 通过 Connect RPC 协议经 OctoBus 调用能力：
 
 **改进：** 在 README 中明确网络配置要求，添加 healthcheck 确保启动顺序。
 
-### 问题 2：定时触发不生效
+### 问题 2：定时触发时区偏移
 
-**现象：** cron 配置 `0 2 * * *` 但到了 02:00 没有触发。
+**现象：** 期望每天 02:00（北京时间）执行巡检，直接写 `0 2 * * *` 会在北京时间 10:00 才触发。
 
-**定位：** 时区问题。容器默认 UTC，服务器在 Asia/Shanghai (UTC+8)，02:00 UTC = 10:00 本地时间。同时发现调度器 `enabled` 标志默认为 false。
+**定位：** 部署的 daemon 版本为 v2607.10.0，其声明式 cron 触发器固定按 **UTC** 求值；该版本的 trigger 级 `timezone` 字段尚不存在（写上会报 `unknown field`，main 分支文档超前于发布版）。
 
-**解决：** 在 agent-compose.yml 中显式设置 `timezone: "Asia/Shanghai"`，确认 `enabled: true`。
+**解决：** 将 cron 写成 UTC：`0 18 * * *`（18:00 UTC == 次日 02:00 北京时间），并在 yml 注释中显式记录换算关系。
+
+**改进：** 升级 daemon 版本前，先查目标 tag 对应的 schema 手册（`gh api repos/chaitin/agent-compose/contents/docs/pages/agent-compose-yaml-manual.md?ref=<tag>`），不要以 main 分支文档为准。
 
 ### 问题 3：LLM 调用超时/限流
 
@@ -270,6 +272,22 @@ Agent 通过 Connect RPC 协议经 OctoBus 调用能力：
 **定位：** 对所有 medium 级 finding 都调用 LLM，并发请求过多。
 
 **解决：** 增加重试退避策略（max_retries=3, retry_delay=2s），并限制 LLM 只在 banner 为空的 ambiguous findings 上调用，减少调用量 ~80%。
+
+### 问题 4：不可达主机扫描触发 OctoBus 30s 超时
+
+**现象：** 对不可达资产做全端口列表扫描时，OctoBus 网关返回 `504 DeadlineExceeded`——on-demand 实例的调用有约 30s 服务端 deadline，而串行扫描 52 端口 × 5s = 260s 远超预算。
+
+**定位：** OctoBus on-demand 实例按需拉起并限时执行，长尾扫描必须压缩进 deadline。
+
+**解决：** 双管齐下——① `SCAN_TIMEOUT` 从 5s 降到 2s；② 能力服务端 portscan.js 从串行 `for...await` 改为 **20-worker 有界并发池**（worker 模式 + Promise.all）。优化后最新一轮 11 次 OctoBus 调用 **0 个 504**（不可达主机 ~16s 完成，可达主机 ~6s）。
+
+### 问题 5：daemon 单文件 bind mount 导致 .env 为空
+
+**现象：** daemon 容器内 `/data/work/.env` 为 0 字节，agent-compose.yml 的 `env_file` 解析不到 token。
+
+**定位：** docker-compose 中 `./.env:/data/work/.env:ro` 单文件 bind mount 在宿主机文件被重写（inode 替换）后失效，容器内看到的仍是旧 inode 的空文件。
+
+**解决：** 去掉单文件挂载，`.env` 直接写入宿主机 `/opt/agent-compose/data/work/.env`（目录挂载范围内），daemon 立即读到。
 
 ---
 

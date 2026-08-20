@@ -11,6 +11,12 @@ const SAMPLE_ASSETS = [
   { ip: "10.0.3.31", hostname: "k8s-worker-01", tags: ["production", "internal-only"], owner: "platform-team", environment: "prod" },
   { ip: "203.0.113.10", hostname: "public-lb-01", tags: ["production", "external-facing", "dmz"], owner: "infra-team", environment: "prod" },
   { ip: "203.0.113.20", hostname: "public-api-01", tags: ["production", "external-facing"], owner: "api-team", environment: "prod" },
+  // Live demo targets on the shared docker network (resolvable by the
+  // portscan service and reachable from the inspection sandbox):
+  // these produce genuine open-port findings during verification runs.
+  { ip: "octobus", hostname: "capability-gateway-01", tags: ["production", "management-plane", "high-risk-service"], owner: "security-team", environment: "prod" },
+  { ip: "agent-compose", hostname: "agent-daemon-01", tags: ["production", "management-plane", "control-plane"], owner: "platform-team", environment: "prod" },
+  { ip: "172.18.0.1", hostname: "docker-host-gw", tags: ["production", "internal-only", "host"], owner: "infra-team", environment: "prod" },
 ];
 
 const service = defineService({

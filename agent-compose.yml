@@ -1,104 +1,85 @@
-# agent-compose project file: exposure-inspection-agent
+# agent-compose project: exposure-inspection-agent
 #
-# This file is consumed by agent-compose daemon to manage the agent's
-# lifecycle: build, run, schedule, and proxy capabilities.
+# Managed by the agent-compose daemon (v2607.10.0). Schema reference:
+# docs/pages/agent-compose-yaml-manual.md @ tag v2607.10.0 (chaitin/agent-compose)
 #
-# agent-compose architecture:
-#   - daemon: persistent process, single source of truth (this file)
-#   - CLI: thin client, validates and forwards commands to daemon
-#   - guest: Docker container running the agent code in sandbox
+# Architecture:
+#   daemon  : agent-compose container (docker.sock mounted, 127.0.0.1:7410)
+#   sandbox : chaitin/agent-compose-guest image, created per run via docker driver
+#   gateway : OctoBus (capset "exposure-scan", Connect RPC over HTTP)
 #
-# Trigger: cron (daily at 02:00)
-# Runtime: docker (container-based isolation)
-# Model: env-injected credentials, never hardcoded
+# The inspection cycle itself is deterministic Python (src/main.py);
+# the scheduler trigger drives an agent turn that executes the cycle.
+# Operational/manual execution: `agent-compose run inspector --command "python3 src/main.py"`
 
 name: exposure-inspection-agent
-description: >
-  Internet exposure surface and high-risk management port inspection agent.
-  Scans assets for exposed management ports and debug interfaces, classifies
-  exposures using practice-derived rules, and generates prioritized reports.
 
-# Runtime configuration
-runtime:
-  driver: docker
-  image: exposure-inspection-agent:latest
-  build:
-    context: .
-    dockerfile: Dockerfile
-  restart: always
-  healthcheck:
-    test: ["CMD", "python3", "-c", "import sys; sys.path.insert(0,'/app/src'); import config; print('ok')"]
-    interval: 60s
-    timeout: 10s
-    retries: 3
-    start_period: 10s
+# Deployment secrets (resolved beside the compose file at /data/work/.env).
+# OCTOBUS_CAPSET_TOKEN is the capset token issued by OctoBus admin
+# (octobus capset add-token exposure-scan inspector-agent).
+env_file: .env
 
-# Workspace: files available to the agent at /app
-workspace:
-  src: ./src
-  knowledge: ./knowledge
-  sample_data: ./sample-data
+workspaces:
+  # Local provider: the daemon snapshots ./inspector into each sandbox run.
+  # The source directory is never mutated by sandbox runs (immutable,
+  # audit-friendly executions).
+  inspector:
+    provider: local
+    path: ./inspector
 
-# Environment variables (all credentials are placeholders - never hardcode!)
-# Copy .env.example to .env and fill in real values before deployment.
-environment:
-  # OctoBus gateway connection
-  OCTOBUS_ENDPOINT: "${OCTOBUS_ENDPOINT}"
-  OCTOBUS_CAPSET_TOKEN: "${OCTOBUS_CAPSET_TOKEN}"
-
-  # LLM model credentials (OpenAI-compatible API)
-  LLM_API_BASE: "${LLM_API_BASE}"
-  LLM_API_KEY: "${LLM_API_KEY}"
-  LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
-
-  # Agent configuration
-  ASSET_INVENTORY_PATH: "/data/assets.csv"
-  OUTPUT_DIR: "/data/output"
-  KNOWLEDGE_DIR: "/app/knowledge"
-  SCAN_TIMEOUT: "10"
-  SCAN_CONCURRENCY: "5"
-
-# Volumes: persistent data across container restarts
 volumes:
-  agent_output:
-    mount: /data/output
-    description: "Inspection reports and audit logs"
-  agent_knowledge:
-    mount: /app/knowledge
-    description: "Practice-derived rule files (read-only)"
+  # Persistent output across sandbox runs (reports + NDJSON audit trail).
+  inspection-output: {}
 
-# Trigger: cron schedule (daily at 02:00 AM)
-# Why cron over event-driven: exposure inspection is a periodic full-scan
-# activity. Event-driven triggers (e.g., on new asset registration) would
-# cause redundant scans and miss cumulative exposure patterns (port
-# combinations). Cron ensures consistent baseline coverage.
-trigger:
-  type: cron
-  schedule: "0 2 * * *"  # Daily 02:00
-  timezone: "Asia/Shanghai"
-  enabled: true
-
-# Capability proxy: route agent calls through OctoBus
-# This ensures all capability calls go through the gateway, not directly
-# to backend services. agent-compose daemon proxies requests to OctoBus.
-capabilities:
-  gateway:
-    type: octobus
-    endpoint: "${OCTOBUS_ENDPOINT}"
-    capset: "exposure-scan"
-    token_env: "OCTOBUS_CAPSET_TOKEN"
-    protocol: "connect-rpc"
-    # Network: both agent-compose and OctoBus on same Docker bridge network
-    # OctoBus binds 127.0.0.1 only - not exposed to public internet
-    network: "agent-net"
-
-# Logging configuration
-logging:
-  level: info
-  format: json
-  # Audit logs in NDJSON format for traceability
-  audit:
-    enabled: true
-    path: /data/output/logs
-    format: ndjson
-    retention_days: 90
+agents:
+  inspector:
+    image: ghcr.nju.edu.cn/chaitin/agent-compose-guest:latest
+    driver:
+      docker: {}
+    # Select the project workspace (snapshot of ./inspector) at /workspace
+    workspace:
+      name: inspector
+    # Capability authorization boundary: capset "exposure-scan" grants ONLY
+    # portscan.v1.PortScanService/ScanPorts and
+    # assetquery.v1.AssetQueryService/QueryAssets (method-level whitelist).
+    # The agent reaches the OctoBus gateway over the shared docker network
+    # using a scoped capset token injected via env (see .env).
+    capset_ids:
+      - exposure-scan
+    volumes:
+      # Persistent output volume: reports + NDJSON audit trail survive sandbox
+      # removal. Target kept OUTSIDE /workspace (daemon runtime path).
+      - inspection-output:/output
+    env:
+      # OctoBus gateway (Connect RPC), resolved via docker network DNS.
+      OCTOBUS_ENDPOINT: http://octobus:9000
+      OCTOBUS_CAPSET: exposure-scan
+      OCTOBUS_CAPSET_TOKEN:
+        value: ${OCTOBUS_CAPSET_TOKEN}
+        secret: true
+      # Path layout inside the sandbox (workspace snapshot root = /workspace;
+      # persistent output lives on the inspection-output volume at /output)
+      ASSET_INVENTORY_PATH: /workspace/sample-data/assets.json
+      OUTPUT_DIR: /output
+      OCTOBUS_TIMEOUT: "90"
+      KNOWLEDGE_DIR: /workspace/knowledge
+      # 2s per port keeps full-list scans of unreachable hosts inside the
+      # OctoBus on-demand invoke deadline (~30s server-side)
+      SCAN_TIMEOUT: "2"
+      SCAN_CONCURRENCY: "8"
+    scheduler:
+      enabled: true
+      sandbox_policy: new
+      triggers:
+        # Daily full-scan at 02:00 Asia/Shanghai. Daemon v2607.10.0 evaluates
+        # declarative cron triggers in UTC, so 02:00 CST == 18:00 UTC.
+        # Cron chosen over event-driven triggers: exposure inspection is a
+        # periodic baseline activity; event triggers would cause redundant
+        # scans and miss cumulative exposure patterns (port combinations).
+        - name: daily-exposure-inspection
+          cron: "0 18 * * *"
+          prompt: >
+            Run the daily internet exposure inspection cycle now. Execute
+            `python3 src/main.py` in the project root, then summarize the
+            generated report: total assets scanned, findings by severity,
+            and the top critical exposures.

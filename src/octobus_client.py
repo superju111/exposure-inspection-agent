@@ -16,6 +16,10 @@ Design rationale (per assessment requirement Q10):
 Protocol: Connect RPC (HTTP/1.1 friendly, JSON mapping)
   - Chosen over raw gRPC for easier debugging and no HTTP/2 dependency
   - Chosen over MCP because this is a service call, not a tool ecosystem interaction
+
+OctoBus Connect routing (verified against deployed gateway):
+  POST {endpoint}/capsets/{capset}/connect/{instance}/{service.v1.Service/Method}
+  Authorization: Bearer <capset token>
 """
 import json
 import time
@@ -26,9 +30,24 @@ from typing import Optional
 class OctoBusClient:
     """Client for calling OctoBus gateway via Connect RPC protocol."""
 
-    def __init__(self, endpoint: str, token: str, timeout: int = 30):
+    def __init__(
+        self,
+        endpoint: str,
+        token: str,
+        capset: str = "exposure-scan",
+        portscan_instance: str = "portscan-default",
+        portscan_method: str = "portscan.v1.PortScanService/ScanPorts",
+        assetquery_instance: str = "assetquery-default",
+        assetquery_method: str = "assetquery.v1.AssetQueryService/QueryAssets",
+        timeout: int = 30,
+    ):
         self.endpoint = endpoint.rstrip("/")
         self.token = token
+        self.capset = capset
+        self.portscan_instance = portscan_instance
+        self.portscan_method = portscan_method
+        self.assetquery_instance = assetquery_instance
+        self.assetquery_method = assetquery_method
         self.timeout = timeout
         self.headers = {
             "Content-Type": "application/json",
@@ -36,14 +55,15 @@ class OctoBusClient:
             "Connect-Protocol-Version": "1",
         }
 
-    def _call(self, service: str, instance: str, method: str, payload: dict) -> dict:
+    def _call(self, instance: str, method: str, payload: dict) -> dict:
         """
-        Execute a Connect RPC call through OctoBus gateway.
-        URL pattern: {endpoint}/{service}.{instance}/{method}
+        Execute a Connect RPC call through the OctoBus gateway.
+        URL pattern: {endpoint}/capsets/{capset}/connect/{instance}/{method}
+        where method is the full protobuf method path.
         """
-        url = f"{self.endpoint}/{service}.{instance}/{method}"
+        url = f"{self.endpoint}/capsets/{self.capset}/connect/{instance}/{method}"
         start_ts = time.time()
-        call_id = f"{service}_{instance}_{method}_{int(start_ts*1000)}"
+        call_id = f"{instance}_{method.split('/')[-1]}_{int(start_ts*1000)}"
 
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -65,7 +85,7 @@ class OctoBusClient:
                 json.dumps({
                     "type": "octobus_call",
                     "call_id": call_id,
-                    "service": service,
+                    "capset": self.capset,
                     "instance": instance,
                     "method": method,
                     "status_code": resp.status_code,
@@ -96,9 +116,8 @@ class OctoBusClient:
             "timeout_per_port": timeout_per_port,
         }
         return self._call(
-            service="portscan",
-            instance="default",
-            method="scan_ports",
+            instance=self.portscan_instance,
+            method=self.portscan_method,
             payload=payload,
         )
 
@@ -109,8 +128,7 @@ class OctoBusClient:
         """
         payload = {"filter": asset_filter or {}}
         return self._call(
-            service="assetquery",
-            instance="default",
-            method="query_assets",
+            instance=self.assetquery_instance,
+            method=self.assetquery_method,
             payload=payload,
         )

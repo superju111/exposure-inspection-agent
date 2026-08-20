@@ -14,19 +14,24 @@ from typing import Optional
 class OctoBusConfig:
     """OctoBus gateway connection settings."""
     # Connect RPC endpoint (HTTP/1.1 friendly, JSON mapping)
-    # OctoBus binds 127.0.0.1 only - never exposed to public internet
+    # In agent-compose sandbox: http://octobus:9000 (shared docker network)
     endpoint: str = os.environ.get("OCTOBUS_ENDPOINT", "http://127.0.0.1:9000")
     # Bearer token from capset configuration (env-injected, never hardcoded)
     token: str = os.environ.get("OCTOBUS_CAPSET_TOKEN", "")
-    # Service and method names as registered in capset
-    portscan_service: str = "portscan"
-    portscan_instance: str = "default"
-    portscan_method: str = "scan_ports"
+    # Capability set that authorizes this agent (method-level whitelist)
+    capset: str = os.environ.get("OCTOBUS_CAPSET", "exposure-scan")
+    # Service instances and full method paths as registered in OctoBus
+    portscan_instance: str = os.environ.get("OCTOBUS_PORTSCAN_INSTANCE", "portscan-default")
+    portscan_method: str = os.environ.get(
+        "OCTOBUS_PORTSCAN_METHOD", "portscan.v1.PortScanService/ScanPorts"
+    )
     assetquery_service: str = "assetquery"
-    assetquery_instance: str = "default"
-    assetquery_method: str = "query_assets"
-    # Request timeout in seconds
-    timeout: int = 30
+    assetquery_instance: str = os.environ.get("OCTOBUS_ASSETQUERY_INSTANCE", "assetquery-default")
+    assetquery_method: str = os.environ.get(
+        "OCTOBUS_ASSETQUERY_METHOD", "assetquery.v1.AssetQueryService/QueryAssets"
+    )
+    # Request timeout in seconds (unroutable hosts need a full scan window)
+    timeout: int = int(os.environ.get("OCTOBUS_TIMEOUT", "30"))
 
 
 @dataclass
@@ -90,6 +95,8 @@ class AgentConfig:
         2181, 8500,
         # Monitoring systems
         3000, 9090, 9093,
+        # Capability gateway / agent orchestration control planes
+        9000, 7410,
     ])
 
     octobus: OctoBusConfig = field(default_factory=OctoBusConfig)

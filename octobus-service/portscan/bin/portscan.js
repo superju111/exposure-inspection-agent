@@ -66,11 +66,22 @@ const service = defineService({
       const timeout = timeout_per_port || 5;
       const startTime = Date.now();
       console.error("[portscan] Scanning " + ports.length + " ports on " + host);
-      const results = [];
-      for (const port of ports) {
-        const result = await scanPort(host, port, timeout);
-        results.push(result);
+      // Bounded-concurrency scan: OctoBus on-demand invokes have a ~30s
+      // server-side deadline, so sequential scanning of unreachable hosts
+      // (ports * timeout) would exceed it. 20 workers keep the full list
+      // inside the deadline even in the worst case.
+      const CONCURRENCY = 20;
+      const results = new Array(ports.length);
+      let next = 0;
+      async function worker() {
+        while (next < ports.length) {
+          const idx = next++;
+          results[idx] = await scanPort(host, ports[idx], timeout);
+        }
       }
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, ports.length) }, worker)
+      );
       const openCount = results.filter(r => r.state === "open").length;
       const duration = Date.now() - startTime;
       console.error("[portscan] Scan complete: " + openCount + "/" + ports.length + " open in " + duration + "ms");

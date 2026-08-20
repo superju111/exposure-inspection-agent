@@ -46,6 +46,11 @@ def run_cycle():
     octobus = OctoBusClient(
         endpoint=config.octobus.endpoint,
         token=config.octobus.token,
+        capset=config.octobus.capset,
+        portscan_instance=config.octobus.portscan_instance,
+        portscan_method=config.octobus.portscan_method,
+        assetquery_instance=config.octobus.assetquery_instance,
+        assetquery_method=config.octobus.assetquery_method,
         timeout=config.octobus.timeout,
     )
     collector = Collector(config, octobus)
