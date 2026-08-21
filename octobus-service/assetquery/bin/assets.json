@@ -1,0 +1,93 @@
+[
+  {
+    "ip": "10.0.1.10",
+    "hostname": "web-prod-01",
+    "tags": ["production", "external-facing"],
+    "owner": "web-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.1.11",
+    "hostname": "web-prod-02",
+    "tags": ["production", "external-facing"],
+    "owner": "web-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.2.20",
+    "hostname": "db-master-01",
+    "tags": ["production", "crown-jewel", "internal-only"],
+    "owner": "db-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.2.21",
+    "hostname": "db-replica-01",
+    "tags": ["production", "crown-jewel", "internal-only"],
+    "owner": "db-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.3.30",
+    "hostname": "k8s-master-01",
+    "tags": ["production", "internal-only"],
+    "owner": "platform-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.3.31",
+    "hostname": "k8s-worker-01",
+    "tags": ["production", "internal-only"],
+    "owner": "platform-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "203.0.113.10",
+    "hostname": "public-lb-01",
+    "tags": ["production", "external-facing", "dmz"],
+    "owner": "infra-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "203.0.113.20",
+    "hostname": "public-api-01",
+    "tags": ["production", "external-facing"],
+    "owner": "api-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "10.0.4.40",
+    "hostname": "staging-app-01",
+    "tags": ["staging", "internal-only"],
+    "owner": "web-team",
+    "environment": "staging"
+  },
+  {
+    "ip": "10.0.4.41",
+    "hostname": "staging-redis-01",
+    "tags": ["staging", "internal-only"],
+    "owner": "db-team",
+    "environment": "staging"
+  },
+  {
+    "ip": "octobus",
+    "hostname": "capability-gateway-01",
+    "tags": ["production", "management-plane", "high-risk-service"],
+    "owner": "security-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "agent-compose",
+    "hostname": "agent-daemon-01",
+    "tags": ["production", "management-plane", "control-plane"],
+    "owner": "platform-team",
+    "environment": "prod"
+  },
+  {
+    "ip": "172.18.0.1",
+    "hostname": "docker-host-gw",
+    "tags": ["production", "internal-only", "host"],
+    "owner": "infra-team",
+    "environment": "prod"
+  }
+]

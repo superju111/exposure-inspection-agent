@@ -67,6 +67,17 @@ agents:
       # OctoBus on-demand invoke deadline (~30s server-side)
       SCAN_TIMEOUT: "2"
       SCAN_CONCURRENCY: "8"
+      # LLM fuzzy-judgment backend (Volcengine Ark, OpenAI-compatible).
+      # Custom ARK_* names (not LLM_*): the daemon reserves and injects
+      # LLM_API_* into every sandbox for its own llm facade, which is not
+      # provisioned on this deployment (facade returns 403/timeout).
+      ARK_API_BASE:
+        value: ${ARK_API_BASE}
+      ARK_API_KEY:
+        value: ${ARK_API_KEY}
+        secret: true
+      ARK_MODEL:
+        value: ${ARK_MODEL}
     scheduler:
       enabled: true
       sandbox_policy: new

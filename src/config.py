@@ -37,10 +37,14 @@ class OctoBusConfig:
 @dataclass
 class LLMConfig:
     """LLM model configuration for fuzzy judgment tasks."""
-    # Model API endpoint (OpenAI-compatible format)
-    api_base: str = os.environ.get("LLM_API_BASE", "")
-    api_key: str = os.environ.get("LLM_API_KEY", "")
-    model: str = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+    # Model API endpoint (OpenAI-compatible format).
+    # Custom ARK_* names bypass the daemon-injected LLM_API_* sandbox vars:
+    # agent-compose reserves LLM_API_ENDPOINT/KEY/PROTOCOL for its own llm
+    # facade (unprovisioned here - returns 403 "llm facade token wire api
+    # mismatch" / timeout), so the agent reads its own ARK_* triple instead.
+    api_base: str = os.environ.get("ARK_API_BASE", "")
+    api_key: str = os.environ.get("ARK_API_KEY", "")
+    model: str = os.environ.get("ARK_MODEL", "gpt-4o-mini")
     temperature: float = 0.3
     max_tokens: int = 2000
     # Retry settings for rate limiting
